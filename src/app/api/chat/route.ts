@@ -44,7 +44,7 @@ export async function POST(req: Request) {
 
     // Initialisation du modèle avec l'instruction système
     const model = genAI.getGenerativeModel({ 
-        model: 'gemini-1.5-flash-001', // Assurez-vous d'utiliser un modèle récent (1.5)
+        model: 'gemini-2.5-flash', // Assurez-vous d'utiliser un modèle récent (1.5)
         systemInstruction: systemInstruction 
     });
     

@@ -185,15 +185,16 @@ export default function ChatInterface({
           const transcript = result[0].transcript;
           
           if (result.isFinal) {
-            finalTranscript += transcript;
+            finalTranscript = transcript;
           } else {
-            interimTranscript += transcript;
+            interimTranscript = transcript;
           }
         }
 
         if (finalTranscript) {
+          // For final results, append to existing input and send
           setInput(prev => {
-            const fullText = prev ? `${prev} ${finalTranscript}` : finalTranscript;
+            const fullText = prev ? `${prev} ${finalTranscript}`.trim() : finalTranscript;
             // Auto-send the message
             setTimeout(() => {
               sendMessageWithText(fullText);
@@ -203,8 +204,12 @@ export default function ChatInterface({
           setIsListening(false);
           recognitionRef.current?.stop();
         } else if (interimTranscript) {
-          // Show interim results for better UX
-          setInput(prev => prev ? `${prev} ${interimTranscript}` : interimTranscript);
+          // For interim results, just show them without affecting the base text
+          setInput(prev => {
+            // If there's existing text, show it with the interim transcript
+            // Otherwise just show the interim transcript
+            return prev ? `${prev} ${interimTranscript}` : interimTranscript;
+          });
         }
       };
 

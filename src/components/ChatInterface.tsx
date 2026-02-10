@@ -67,6 +67,7 @@ export default function ChatInterface({
   const [tokensPerSec, setTokensPerSec] = useState(0);
   const [isListening, setIsListening] = useState(false);
   const [isSpeechSupported, setIsSpeechSupported] = useState(true);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -78,6 +79,34 @@ export default function ChatInterface({
   };
 
   useEffect(scrollToBottom, [messages]);
+
+  const generateAutoTitle = useCallback(async (chatId: string, firstMessage: string) => {
+    try {
+      const response = await fetch('/api/generate-title-fixed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: firstMessage }),
+      });
+
+      if (!response.ok) throw new Error('Failed to generate title');
+
+      const { title } = await response.json();
+      
+      // Update chat title in database
+      const { error } = await supabase
+        .from('chats')
+        .update({ title })
+        .eq('id', chatId);
+
+      if (error) throw error;
+
+      // Trigger sidebar refresh to show new title
+      setRefreshTrigger(prev => prev + 1);
+      
+    } catch (error) {
+      console.error('Error generating title:', error);
+    }
+  }, [supabase, setRefreshTrigger]);
 
   const sendMessage = useCallback(async (e?: React.FormEvent, textOverride?: string) => {
     if (e) e.preventDefault();
@@ -98,8 +127,27 @@ export default function ChatInterface({
 
     const startTime = performance.now();
     let charCount = 0;
+    let newChatId: string | null = null;
 
     try {
+      // Create new chat if this is the first message
+      if (messages.length === 0) {
+        const { data, error } = await supabase
+          .from('chats')
+          .insert({
+            user_id: userId,
+            title: 'Nouvelle conversation'
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        newChatId = data.id;
+        
+        // Trigger sidebar refresh to show new chat immediately
+        setRefreshTrigger(prev => prev + 1);
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -141,6 +189,20 @@ export default function ChatInterface({
           return newArr;
         });
       }
+
+      // Save messages to database if we have a chat
+      if (newChatId) {
+        await supabase
+          .from('messages')
+          .insert([
+            { chat_id: newChatId, role: 'user', content: userMsg.content },
+            { chat_id: newChatId, role: 'model', content: aiMsgContent }
+          ]);
+
+        // Generate auto title for new chat
+        generateAutoTitle(newChatId, userMsg.content);
+      }
+
     } catch (error: unknown) {
       if (error instanceof Error) {
         console.error('Error:', error);
@@ -156,7 +218,7 @@ export default function ChatInterface({
         setInput('');
       }
     }
-  }, [input, isLoading, messages]);
+  }, [input, isLoading, messages, userId, generateAutoTitle, supabase]);
 
   const sendMessageWithText = useCallback((text: string) => {
     sendMessage(undefined, text);
@@ -242,6 +304,12 @@ export default function ChatInterface({
     setMessages([]);
     setInput('');
     setTokensPerSec(0);
+    setRefreshTrigger(prev => prev + 1); // Trigger sidebar refresh
+  };
+
+  const handleChatSelect = (chatId: string) => {
+    // TODO: Implement chat loading logic
+    console.log('Selected chat:', chatId);
   };
 
   return (
@@ -251,9 +319,10 @@ export default function ChatInterface({
         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
         userName={userName}
-        onNewChat={handleNewChat} onChatSelect={function (chatId: string): void {
-          throw new Error('Function not implemented.');
-        } }      />
+        onNewChat={handleNewChat} 
+        onChatSelect={handleChatSelect}
+        refreshTrigger={refreshTrigger}
+      />
 
       <div className="flex-1 flex flex-col h-full relative w-full transition-all duration-300">
         

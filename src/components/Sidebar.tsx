@@ -18,9 +18,10 @@ interface SidebarProps {
   onNewChat: () => void;
   currentChatId?: string;
   onChatSelect: (chatId: string) => void;
+  refreshTrigger?: number;
 }
 
-export default function Sidebar({ isOpen, setIsOpen, userName, onNewChat, currentChatId, onChatSelect }: SidebarProps) {
+export default function Sidebar({ isOpen, setIsOpen, userName, onNewChat, currentChatId, onChatSelect, refreshTrigger }: SidebarProps) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -48,7 +49,7 @@ export default function Sidebar({ isOpen, setIsOpen, userName, onNewChat, curren
 
   useEffect(() => {
     fetchChats();
-  }, [fetchChats]);
+  }, [fetchChats, refreshTrigger]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

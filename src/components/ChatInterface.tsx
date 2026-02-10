@@ -5,7 +5,50 @@ import { Message } from '@/lib/types';
 import MessageBubble from './MessageBubble';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
-import Sidebar from './Sidebar'; 
+import Sidebar from './Sidebar';
+import { Mic, MicOff } from 'lucide-react';
+
+interface SpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  error: string;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start(): void;
+  stop(): void;
+  abort(): void;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: ((event: SpeechRecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition: new () => SpeechRecognition;
+    webkitSpeechRecognition: new () => SpeechRecognition;
+  }
+} 
 
 export default function ChatInterface({ 
   initialMessages, 
@@ -21,8 +64,11 @@ export default function ChatInterface({
   const [isLoading, setIsLoading] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [tokensPerSec, setTokensPerSec] = useState(0);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeechSupported, setIsSpeechSupported] = useState(true);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -31,6 +77,51 @@ export default function ChatInterface({
   };
 
   useEffect(scrollToBottom, [messages]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      
+      if (!SpeechRecognitionAPI) {
+        setIsSpeechSupported(false);
+        return;
+      }
+
+      const recognition = new SpeechRecognitionAPI();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'fr-FR';
+
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        const transcript = event.results[0][0].transcript;
+        setInput(prev => prev ? `${prev} ${transcript}` : transcript);
+        setIsListening(false);
+      };
+
+      recognition.onerror = (event: SpeechRecognitionEvent) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  const toggleSpeechRecognition = () => {
+    if (!isSpeechSupported || !recognitionRef.current) return;
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
 
   const handleNewChat = () => {
     setMessages([]);
@@ -184,8 +275,28 @@ export default function ChatInterface({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Discutez avec Gemini..."
-                className="w-full p-4 pr-14 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-200/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-700 placeholder:text-slate-400"
+                className="w-full p-4 pr-28 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-200/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-700 placeholder:text-slate-400"
               />
+              
+              {isSpeechSupported && (
+                <button
+                  type="button"
+                  onClick={toggleSpeechRecognition}
+                  className={`absolute right-14 top-2 bottom-2 aspect-square rounded-xl transition-all flex items-center justify-center shadow-md hover:shadow-lg hover:scale-105 active:scale-95 ${
+                    isListening 
+                      ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse' 
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                  title={isListening ? "Arrêter l'enregistrement" : "Démarrer la reconnaissance vocale"}
+                >
+                  {isListening ? (
+                    <MicOff className="w-5 h-5" />
+                  ) : (
+                    <Mic className="w-5 h-5" />
+                  )}
+                </button>
+              )}
+              
               <button
                 type="submit"
                 disabled={isLoading || !input.trim()}

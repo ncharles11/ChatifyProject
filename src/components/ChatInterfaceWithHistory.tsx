@@ -110,10 +110,10 @@ export default function ChatInterfaceWithHistory({
     if (!currentChatId || chatMessages.length < 2) return;
 
     try {
-      const response = await fetch('/api/generate-title', {
+      const response = await fetch('/api/generate-title-fixed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: chatMessages }),
+        body: JSON.stringify({ message: chatMessages[0]?.content || '' }),
       });
 
       if (!response.ok) throw new Error('Failed to generate title');

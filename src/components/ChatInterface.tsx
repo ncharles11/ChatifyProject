@@ -82,7 +82,7 @@ export default function ChatInterface({
 
   const generateAutoTitle = useCallback(async (chatId: string, firstMessage: string) => {
     try {
-      const response = await fetch('/api/generate-title', {
+      const response = await fetch('/api/generate-title-fixed', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: firstMessage }),

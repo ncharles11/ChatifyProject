@@ -1,5 +1,10 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+interface Message {
+  role: string;
+  content: string;
+}
+
 export async function POST(request: Request) {
   try {
     const { messages } = await request.json();
@@ -12,7 +17,7 @@ export async function POST(request: Request) {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     // Get first user message for title generation
-    const firstUserMessage = messages.find(msg => msg.role === 'user')?.content || '';
+    const firstUserMessage = messages.find((msg: Message) => msg.role === 'user')?.content || '';
     
     // Strict prompt for clean title generation
     const prompt = `Generate exactly 3-5 keywords as title for: "${firstUserMessage}". 

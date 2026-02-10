@@ -11,16 +11,49 @@ export async function POST(request: Request) {
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY!);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
-    // Create conversation summary
-    const conversation = messages
-      .slice(0, 4) // Use first few messages to avoid long prompts
-      .map((msg: any) => `${msg.role}: ${msg.content}`)
-      .join('\n');
+    // Get first user message for title generation
+    const firstUserMessage = messages.find(msg => msg.role === 'user')?.content || '';
+    
+    // Strict prompt for clean title generation
+    const prompt = `Generate exactly 3-5 keywords as title for: "${firstUserMessage}". 
+Rules: 
+- NO quotes or quotation marks
+- NO prefixes like "Title:", "Titre:", "Sujet:"
+- NO markdown formatting
+- NO additional text or explanations
+- Just the keywords separated by spaces
+- Use same language as the message
 
-    const prompt = `Summarize this conversation in 3 to 5 words for a title. No quotation marks. Use the language of the conversation.\n\nConversation:\n${conversation}`;
+Respond ONLY with the title.`;
 
     const result = await model.generateContent(prompt);
-    const title = result.response.text().trim();
+    let title = result.response.text().trim();
+
+    // Robust cleaning logic
+    title = title
+      // Remove any prefixes
+      .replace(/^(Title|Titre|Sujet|Subject)\s*[:|-]?\s*/i, '')
+      // Remove quotes and brackets
+      .replace(/["'*`]/g, '')
+      // Remove markdown formatting
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/_(.*?)_/g, '$1')
+      // Remove common filler words
+      .replace(/\b(voici|voilà|ceci|cela|discutons|conversation|chat)\b/gi, '')
+      // Clean extra whitespace
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Ensure title is not too long
+    if (title.length > 50) {
+      title = title.split(' ').slice(0, 5).join(' ');
+    }
+
+    // Ensure we have at least something
+    if (!title || title.length < 2) {
+      title = firstUserMessage.split(' ').slice(0, 3).join(' ');
+    }
 
     return Response.json({ title });
   } catch (error) {

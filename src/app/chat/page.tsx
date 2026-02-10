@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import ChatInterface from '@/components/ChatInterface';
+import ChatInterfaceWithHistory from '@/components/ChatInterfaceWithHistory';
 
 export default async function ChatPage() {
   const supabase = await createClient();
@@ -13,16 +13,10 @@ export default async function ChatPage() {
 
   const userName = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Utilisateur';
 
-  const { data: messages } = await supabase
-    .from('messages')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: true });
-
   return (
     <main className="h-screen bg-gray-50">
-      <ChatInterface 
-        initialMessages={messages || []} 
+      <ChatInterfaceWithHistory 
+        initialMessages={[]} 
         userId={user.id} 
         userName={userName}
       />

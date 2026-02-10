@@ -1,18 +1,54 @@
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+
+interface Chat {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
 
 interface SidebarProps {
   isOpen: boolean;
   setIsOpen: (value: boolean) => void;
   userName?: string;
   onNewChat: () => void;
+  currentChatId?: string;
+  onChatSelect: (chatId: string) => void;
 }
 
-export default function Sidebar({ isOpen, setIsOpen, userName, onNewChat }: SidebarProps) {
+export default function Sidebar({ isOpen, setIsOpen, userName, onNewChat, currentChatId, onChatSelect }: SidebarProps) {
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createClient();
+
+  const fetchChats = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('chats')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+      setChats(data || []);
+    } catch (error) {
+      console.error('Error fetching chats:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchChats();
+  }, [fetchChats]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -28,6 +64,23 @@ export default function Sidebar({ isOpen, setIsOpen, userName, onNewChat }: Side
       .join('')
       .toUpperCase()
       .slice(0, 2);
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffTime = Math.abs(now.getTime() - date.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return 'Aujourd\'hui';
+    } else if (diffDays === 1) {
+      return 'Hier';
+    } else if (diffDays < 7) {
+      return `Il y a ${diffDays} jours`;
+    } else {
+      return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+    }
   };
 
   return (
@@ -77,11 +130,46 @@ export default function Sidebar({ isOpen, setIsOpen, userName, onNewChat }: Side
              Historique
            </div>
            
-           <div className="space-y-1">
-             <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 text-sm text-slate-400 hover:text-slate-200 transition-colors truncate flex items-center gap-2 group">
-               Session actuelle
-             </button>
-           </div>
+           {loading ? (
+             <div className="space-y-1">
+               {[...Array(3)].map((_, i) => (
+                 <div key={i} className="px-3 py-2 rounded-lg bg-slate-800 animate-pulse">
+                   <div className="h-4 bg-slate-700 rounded w-3/4 mb-2"></div>
+                   <div className="h-3 bg-slate-700 rounded w-1/2"></div>
+                 </div>
+               ))}
+             </div>
+           ) : chats.length === 0 ? (
+             <div className="text-center py-8 text-slate-500 text-sm">
+               Aucune conversation pour le moment
+             </div>
+           ) : (
+             <div className="space-y-1">
+               {chats.map((chat) => (
+                 <button
+                   key={chat.id}
+                   onClick={() => {
+                     onChatSelect(chat.id);
+                     setIsOpen(false);
+                   }}
+                   className={`w-full text-left px-3 py-3 rounded-lg transition-all truncate group ${
+                     currentChatId === chat.id
+                       ? 'bg-indigo-600/20 text-indigo-400 border border-indigo-500/30'
+                       : 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+                   }`}
+                 >
+                   <div className="flex flex-col">
+                     <span className="text-sm font-medium truncate">
+                       {chat.title}
+                     </span>
+                     <span className="text-xs text-slate-500">
+                       {formatDate(chat.updated_at)}
+                     </span>
+                   </div>
+                 </button>
+               ))}
+             </div>
+           )}
         </div>
 
         <div className="p-4 bg-slate-950/50 border-t border-slate-800">

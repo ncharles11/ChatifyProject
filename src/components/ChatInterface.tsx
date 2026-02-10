@@ -248,11 +248,12 @@ export default function ChatInterface({
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       
       <Sidebar 
-        isOpen={isSidebarOpen} 
-        setIsOpen={setIsSidebarOpen} 
-        userName={userName} 
-        onNewChat={handleNewChat}
-      />
+        isOpen={isSidebarOpen}
+        setIsOpen={setIsSidebarOpen}
+        userName={userName}
+        onNewChat={handleNewChat} onChatSelect={function (chatId: string): void {
+          throw new Error('Function not implemented.');
+        } }      />
 
       <div className="flex-1 flex flex-col h-full relative w-full transition-all duration-300">
         

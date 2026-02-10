@@ -180,36 +180,34 @@ export default function ChatInterface({
         let finalTranscript = '';
         let interimTranscript = '';
 
-        for (let i = event.resultIndex; i < event.results.length; i++) {
+        // Build the complete transcript from scratch on every callback
+        for (let i = 0; i < event.results.length; i++) {
           const result = event.results[i];
           const transcript = result[0].transcript;
           
           if (result.isFinal) {
-            finalTranscript = transcript;
+            finalTranscript += transcript + ' ';
           } else {
             interimTranscript = transcript;
           }
         }
 
-        if (finalTranscript) {
-          // For final results, append to existing input and send
-          setInput(prev => {
-            const fullText = prev ? `${prev} ${finalTranscript}`.trim() : finalTranscript;
-            // Auto-send the message
-            setTimeout(() => {
-              sendMessageWithText(fullText);
-            }, 100);
-            return fullText;
-          });
+        // Combine base input with new speech
+        const baseInput = input;
+        const fullTranscript = (baseInput + ' ' + finalTranscript + interimTranscript).trim();
+
+        // Always overwrite the input state, never append
+        setInput(fullTranscript);
+
+        // Auto-send when we have final results
+        if (finalTranscript.trim()) {
           setIsListening(false);
           recognitionRef.current?.stop();
-        } else if (interimTranscript) {
-          // For interim results, just show them without affecting the base text
-          setInput(prev => {
-            // If there's existing text, show it with the interim transcript
-            // Otherwise just show the interim transcript
-            return prev ? `${prev} ${interimTranscript}` : interimTranscript;
-          });
+          
+          // Send the complete message
+          setTimeout(() => {
+            sendMessageWithText(fullTranscript);
+          }, 100);
         }
       };
 
@@ -224,7 +222,7 @@ export default function ChatInterface({
 
       recognitionRef.current = recognition;
     }
-  }, [sendMessageWithText]);
+  }, [sendMessageWithText, input]);
 
   const toggleSpeechRecognition = () => {
     if (!isSpeechSupported || !recognitionRef.current) return;
@@ -233,6 +231,8 @@ export default function ChatInterface({
       recognitionRef.current.stop();
       setIsListening(false);
     } else {
+      // Clear any previous speech input and start fresh
+      setInput(input); // Keep existing typed text
       recognitionRef.current.start();
       setIsListening(true);
     }

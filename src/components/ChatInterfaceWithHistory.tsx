@@ -110,7 +110,7 @@ export default function ChatInterfaceWithHistory({
     if (!currentChatId || chatMessages.length < 2) return;
 
     try {
-      const response = await fetch('/api/generate-title-fixed', {
+      const response = await fetch('/api/generate-title-debug', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: chatMessages[0]?.content || '' }),

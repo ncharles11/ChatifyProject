@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Message } from '@/lib/types';
 import MessageBubble from './MessageBubble';
 import { createClient } from '@/lib/supabase/client';
@@ -11,6 +11,7 @@ import { Mic, MicOff } from 'lucide-react';
 interface SpeechRecognitionEvent extends Event {
   results: SpeechRecognitionResultList;
   error: string;
+  resultIndex: number;
 }
 
 interface SpeechRecognitionResultList {
@@ -78,64 +79,20 @@ export default function ChatInterface({
 
   useEffect(scrollToBottom, [messages]);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-      
-      if (!SpeechRecognitionAPI) {
-        setIsSpeechSupported(false);
-        return;
-      }
+  const sendMessage = useCallback(async (e?: React.FormEvent, textOverride?: string) => {
+    if (e) e.preventDefault();
+    
+    const messageText = textOverride || input;
+    if (!messageText.trim() || isLoading) return;
 
-      const recognition = new SpeechRecognitionAPI();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = 'fr-FR';
-
-      recognition.onresult = (event: SpeechRecognitionEvent) => {
-        const transcript = event.results[0][0].transcript;
-        setInput(prev => prev ? `${prev} ${transcript}` : transcript);
-        setIsListening(false);
-      };
-
-      recognition.onerror = (event: SpeechRecognitionEvent) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-      };
-
-      recognition.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current = recognition;
-    }
-  }, []);
-
-  const toggleSpeechRecognition = () => {
-    if (!isSpeechSupported || !recognitionRef.current) return;
-
-    if (isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    } else {
-      recognitionRef.current.start();
-      setIsListening(true);
-    }
-  };
-
-  const handleNewChat = () => {
-    setMessages([]);
-    setInput('');
-    setTokensPerSec(0);
-  };
-
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
-    const userMsg: Message = { role: 'user', content: input };
+    const userMsg: Message = { role: 'user', content: messageText };
     setMessages((prev) => [...prev, userMsg]);
-    setInput('');
+    
+    // Only clear input if we're not using textOverride (voice input)
+    if (!textOverride) {
+      setInput('');
+    }
+    
     setIsLoading(true);
     setTokensPerSec(0); 
 
@@ -194,7 +151,92 @@ export default function ChatInterface({
       }
     } finally {
       setIsLoading(false);
+      // Clear input after voice message is sent
+      if (textOverride) {
+        setInput('');
+      }
     }
+  }, [input, isLoading, messages]);
+
+  const sendMessageWithText = useCallback((text: string) => {
+    sendMessage(undefined, text);
+  }, [sendMessage]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+      
+      if (!SpeechRecognitionAPI) {
+        setIsSpeechSupported(false);
+        return;
+      }
+
+      const recognition = new SpeechRecognitionAPI();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = 'fr-FR';
+
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          const transcript = result[0].transcript;
+          
+          if (result.isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+
+        if (finalTranscript) {
+          setInput(prev => {
+            const fullText = prev ? `${prev} ${finalTranscript}` : finalTranscript;
+            // Auto-send the message
+            setTimeout(() => {
+              sendMessageWithText(fullText);
+            }, 100);
+            return fullText;
+          });
+          setIsListening(false);
+          recognitionRef.current?.stop();
+        } else if (interimTranscript) {
+          // Show interim results for better UX
+          setInput(prev => prev ? `${prev} ${interimTranscript}` : interimTranscript);
+        }
+      };
+
+      recognition.onerror = (event: SpeechRecognitionEvent) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+  }, [sendMessageWithText]);
+
+  const toggleSpeechRecognition = () => {
+    if (!isSpeechSupported || !recognitionRef.current) return;
+
+    if (isListening) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    } else {
+      recognitionRef.current.start();
+      setIsListening(true);
+    }
+  };
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setInput('');
+    setTokensPerSec(0);
   };
 
   return (
